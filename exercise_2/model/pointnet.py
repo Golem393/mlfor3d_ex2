@@ -110,6 +110,8 @@ class PointNetClassification(nn.Module):
         self.fc3 = nn.Linear(256, num_classes)
         self.dropout = nn.Dropout(p=0.3)
 
+        self.softmax = nn.Softmax(dim=1)
+
         # TODO Add Linear layers, batch norms, dropout with p=0.3, and ReLU
         # Batch Norms and ReLUs are used after all but the last layer
         # Dropout is used only directly after the second Linear layer
@@ -120,7 +122,7 @@ class PointNetClassification(nn.Module):
 
         x = self.relu(self.bn1(self.fc1(x)))
         x = self.relu(self.bn2(self.dropout(self.fc2(x))))
-        x = self.fc3(x)
+        x = self.softmax(self.fc3(x))
         # TODO Pass output of encoder through your layers
         return x
 

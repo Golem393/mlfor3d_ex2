@@ -9,13 +9,78 @@ from exercise_2.model.pointnet import PointNetClassification
 def train(model, trainloader, valloader, device, config):
 
     # TODO Declare loss and move to specified device
-    loss_criterion = None
-
+    loss_criterion = torch.nn.CrossEntropyLoss()
+    loss_criterion.to(device)
     # TODO Declare optimizer
-    optimizer = None
+    optimizer = torch.optim.Adam(model.parameters())
 
     # set model to train, important if your network has e.g. dropout or batchnorm layers
     model.train()
+
+    # keep track of best validation accuracy achieved so that we can save the weights
+    best_accuracy = 0.
+
+    # keep track of running average of train loss for printing
+    train_loss_running = 0.
+
+    for epoch in range(config['max_epochs']):
+        for i, batch in enumerate(trainloader):
+            # move batch to device
+            ShapeNetPoints.move_batch_to_device(batch, device)
+
+            optimizer.zero_grad()
+            prediction = model(batch['points'].float())
+
+            assert(prediction.dim() == 2)
+            # TODO: compute total loss = sum of loss for whole prediction + losses for partial predictions
+            #loss_total = torch.zeros([1], dtype=batch['points'].dtype, requires_grad=True).to(device)
+            true_output = batch["label"]
+            loss_total = loss_criterion(prediction, true_output)  # TODO: Loss due to prediction[:, output_idx, :] (output_idx=0 for global prediction, 1-8 local)
+
+            loss_total.backward()
+            optimizer.step()
+
+            # loss logging
+            train_loss_running += loss_total.item()
+            iteration = epoch * len(trainloader) + i
+
+            if iteration % config['print_every_n'] == (config['print_every_n'] - 1):
+                print(f'[{epoch:03d}/{i:05d}] train_loss: {train_loss_running / config["print_every_n"]:.3f}')
+                train_loss_running = 0.
+
+            # validation evaluation and logging
+            if iteration % config['validate_every_n'] == (config['validate_every_n'] - 1):
+
+                # set model to eval, important if your network has e.g. dropout or batchnorm layers
+                model.eval()
+
+                loss_total_val = 0
+                total, correct = 0, 0
+                # forward pass and evaluation for entire validation set
+                for batch_val in valloader:
+                    ShapeNetPoints.move_batch_to_device(batch_val, device)
+
+                    with torch.no_grad():
+                        # TODO: Get prediction scores
+                        prediction = model(batch_val['points'].float())
+
+                    # TODO: Get predicted labels from scores
+                    predicted_label = torch.argmax(prediction, dim=1)
+                    loss_total_val += loss_criterion(prediction, batch_val["label"]).item()
+                    total += len(batch_val["label"])
+                    correct += (predicted_label == batch_val["label"]).sum().item()
+
+                accuracy = 100 * correct / total
+
+                print(
+                    f'[{epoch:03d}/{i:05d}] val_loss: {loss_total_val / len(valloader):.3f}, val_accuracy: {accuracy:.3f}%')
+
+                if accuracy > best_accuracy:
+                    torch.save(model.state_dict(), f'exercise_2/runs/{config["experiment_name"]}/model_best.ckpt')
+                    best_accuracy = accuracy
+
+                # set model back to train
+                model.train()
 
     # TODO Implement the training loop. It looks very much the same as in the previous exercise part, except that you are now using points instead of voxel grids
 
