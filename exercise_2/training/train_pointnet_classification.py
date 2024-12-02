@@ -12,7 +12,7 @@ def train(model, trainloader, valloader, device, config):
     loss_criterion = torch.nn.CrossEntropyLoss()
     loss_criterion.to(device)
     # TODO Declare optimizer
-    optimizer = torch.optim.Adam(model.parameters())
+    optimizer = torch.optim.Adam(model.parameters(), lr=config['learning_rate'])
 
     # set model to train, important if your network has e.g. dropout or batchnorm layers
     model.train()
@@ -30,7 +30,6 @@ def train(model, trainloader, valloader, device, config):
 
             optimizer.zero_grad()
             prediction = model(batch['points'].float())
-
             assert(prediction.dim() == 2)
             # TODO: compute total loss = sum of loss for whole prediction + losses for partial predictions
             #loss_total = torch.zeros([1], dtype=batch['points'].dtype, requires_grad=True).to(device)

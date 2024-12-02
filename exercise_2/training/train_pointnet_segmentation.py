@@ -9,10 +9,11 @@ from exercise_2.model.pointnet import PointNetSegmentation
 def train(model, trainloader, valloader, device, config):
 
     # TODO Declare loss and move to specified device
-    loss_criterion = None
+    loss_criterion = torch.nn.CrossEntropyLoss()
+    loss_criterion.to(device)
 
     # TODO Declare optimizer
-    optimizer = None
+    optimizer = torch.optim.Adam(model.parameters(), lr=config['learning_rate'])
 
     # set model to train, important if your network has e.g. dropout or batchnorm layers
     model.train()
@@ -25,7 +26,24 @@ def train(model, trainloader, valloader, device, config):
 
     for epoch in range(config['max_epochs']):
         for i, batch in enumerate(trainloader):
-            # TODO Add missing pieces, as in the exercise parts before
+            ShapeNetParts.move_batch_to_device(batch, device)
+
+            optimizer.zero_grad()
+            prediction = model(batch['points'].float())
+
+
+
+            assert (prediction.dim() == 3)
+            true_output = batch["segmentation_labels"]
+            #prediction_reshaped = prediction.view(-1, 50)  # Shape: (32 * 1024, 50)
+            #true_output_reshaped = true_output.view(-1)  # Shape: (32 * 1024)
+            loss_total = loss_criterion(prediction.transpose(2, 1), true_output)
+            loss_total.backward()
+            optimizer.step()
+
+            # loss logging
+            train_loss_running += loss_total.item()
+            iteration = epoch * len(trainloader) + i
 
             if iteration % config['print_every_n'] == (config['print_every_n'] - 1):
                 print(f'[{epoch:03d}/{i:05d}] train_loss: {train_loss_running / config["print_every_n"]:.3f}')
@@ -33,7 +51,7 @@ def train(model, trainloader, valloader, device, config):
 
             # validation evaluation and logging
             if iteration % config['validate_every_n'] == (config['validate_every_n'] - 1):
-                # TODO Add missing pieces, as in the exercise parts before
+                model.eval()
 
                 total, correct = 0, 0
                 ious = []
@@ -41,15 +59,20 @@ def train(model, trainloader, valloader, device, config):
                 # forward pass and evaluation for entire validation set
                 loss_val = 0.
                 for batch_val in valloader:
-                    # TODO Add missing pieces, as in the exercise parts before
+                    ShapeNetParts.move_batch_to_device(batch_val, device)
 
+                    with torch.no_grad():
+                        prediction = model(batch_val['points'].float())
+
+                    true_output = batch_val["segmentation_labels"]
+                    predicted_label = torch.argmax(prediction.transpose(2, 1), dim=1)
                     total += predicted_label.numel()
-                    correct += (predicted_label == batch_val['segmentation_labels']).sum().item()
+                    correct += (predicted_label == true_output).sum().item()
 
                     part_ious = []
                     for part in range(ShapeNetParts.num_classes):
-                        I = torch.sum(torch.logical_and(predicted_label == part, batch_val['segmentation_labels'] == part))
-                        U = torch.sum(torch.logical_or(predicted_label == part, batch_val['segmentation_labels'] == part))
+                        I = torch.sum(torch.logical_and(predicted_label == part, batch_val["segmentation_labels"] == part))
+                        U = torch.sum(torch.logical_or(predicted_label == part, batch_val["segmentation_labels"] == part))
                         if U == 0:
                             iou = 1  # If the union of groundtruth and prediction points is empty, then count part IoU as 1
                         else:
@@ -67,6 +90,7 @@ def train(model, trainloader, valloader, device, config):
                     torch.save(model.state_dict(), f'exercise_2/runs/{config["experiment_name"]}/model_best.ckpt')
                     best_accuracy = accuracy
 
+                model.train()
                 # TODO Add missing pieces, as in the exercise parts before
 
 
